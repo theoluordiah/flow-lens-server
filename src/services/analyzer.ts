@@ -106,7 +106,7 @@ Contributors: ${stats.contributors}
 Stars: ${stats.stars}
 Forks: ${stats.forks}
 Languages: ${langSummary || "Not detected"}
-Weekly commit activity (last 6 weeks, oldest to newest): [${stats.weeklyActivity.join(", ")}]`;
+Weekly commit activity (last 2 weeks, oldest to newest): [${stats.weeklyActivity.join(", ")}]`;
 };
 
 export const buildAnalysisPrompt = (
@@ -134,7 +134,7 @@ Return a JSON object with exactly this shape (no markdown fences):
 
 Rules:
 - Base every score and insight strictly on the data provided above.
-- Consistency reflects regularity of weekly commits across the 6-week window.
+- Consistency reflects regularity of weekly commits across the 2-week window.
 - Collaboration reflects PR and contributor activity.
 - Code quality reflects commit size patterns implied by the data; be reasonable.
 - Improvements must be specific and actionable.

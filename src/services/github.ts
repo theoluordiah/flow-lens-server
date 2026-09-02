@@ -165,18 +165,49 @@ export class GitHubService {
     return this.mapRepo(data);
   }
 
-  async getRepoStats(owner: string, repo: string): Promise<RepoStats> {
-    const linkCount = (link?: string) => this.parsePageCount(link);
+  private async countRecentItems(
+    fetchPage: (page: number) => Promise<Array<{ created_at: string }>>,
+    since: Date
+  ): Promise<number> {
+    let count = 0;
+    let page = 1;
+    while (true) {
+      const items = await fetchPage(page);
+      for (const item of items) {
+        if (new Date(item.created_at) >= since) {
+          count++;
+        } else {
+          return count;
+        }
+      }
+      if (items.length < 100) break;
+      page++;
+    }
+    return count;
+  }
 
-    const [repoRes, contributorsRes, languagesRes, prRes, issuesRes, commitRes] =
-      await Promise.all([
-        await this.octokit.repos.get({ owner, repo }),
-        await this.octokit.repos.listContributors({ owner, repo, per_page: 100 }).catch(() => ({ data: [] })),
-        await this.octokit.repos.listLanguages({ owner, repo }).catch(() => ({ data: {} })),
-        await this.octokit.pulls.list({ owner, repo, state: "all", per_page: 1 }).catch(() => ({ headers: {} as Record<string, string> })),
-        await this.octokit.issues.list({ owner, repo, state: "all", per_page: 1 }).catch(() => ({ headers: {} as Record<string, string> })),
-        await this.octokit.repos.listCommits({ owner, repo, per_page: 1 }).catch(() => ({ headers: {} as Record<string, string> })),
-      ]);
+  async getRepoStats(owner: string, repo: string): Promise<RepoStats> {
+    const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+
+    const [repoRes, contributorsRes, languagesRes] = await Promise.all([
+      this.octokit.repos.get({ owner, repo }),
+      this.octokit.repos.listContributors({ owner, repo, per_page: 100 }).catch(() => ({ data: [] })),
+      this.octokit.repos.listLanguages({ owner, repo }).catch(() => ({ data: {} })),
+    ]);
+
+    const [recentPRs, recentIssues, recentCommits] = await Promise.all([
+      this.countRecentItems(
+        (page) => this.octokit.pulls.list({ owner, repo, state: "all", sort: "created", direction: "desc", per_page: 100, page }).then((r) => r.data),
+        twoWeeksAgo
+      ).catch(() => 0),
+      this.countRecentItems(
+        (page) => this.octokit.issues.list({ owner, repo, state: "all", sort: "created", direction: "desc", per_page: 100, page }).then((r) => r.data),
+        twoWeeksAgo
+      ).catch(() => 0),
+      this.octokit.repos.listCommits({ owner, repo, per_page: 1, since: twoWeeksAgo.toISOString() })
+        .then((r) => this.parsePageCount(r.headers?.link))
+        .catch(() => 0),
+    ]);
 
     const weeklyActivity = await this.getWeeklyActivity(owner, repo);
 
@@ -189,9 +220,9 @@ export class GitHubService {
     }
 
     return {
-      commits: linkCount(commitRes.headers?.link),
-      pullRequests: linkCount(prRes.headers?.link),
-      issues: linkCount(issuesRes.headers?.link),
+      commits: recentCommits,
+      pullRequests: recentPRs,
+      issues: recentIssues,
       contributors:
         Array.isArray(contributorsRes.data) ? contributorsRes.data.length : 0,
       languages: languagePercentages,
@@ -205,7 +236,7 @@ export class GitHubService {
   private async getWeeklyActivity(owner: string, repo: string): Promise<number[]> {
     const weeks: number[] = [];
     const now = new Date();
-    for (let i = 5; i >= 0; i--) {
+    for (let i = 1; i >= 0; i--) {
       const since = new Date(now);
       since.setDate(now.getDate() - (i + 1) * 7);
       const until = new Date(now);

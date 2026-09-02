@@ -260,13 +260,13 @@ export const swaggerDocument = {
           weeklyActivity: {
             type: "array",
             description:
-              "Commit activity for the last 6 weeks, ordered from oldest to newest.",
+              "Commit activity for the last 2 weeks, ordered from oldest to newest.",
             items: {
               type: "integer",
             },
-            minItems: 6,
-            maxItems: 6,
-            example: [18, 25, 21, 34, 29, 31],
+            minItems: 2,
+            maxItems: 2,
+            example: [18, 25],
           },
 
           stars: {
@@ -807,7 +807,7 @@ export const swaggerDocument = {
       get: {
         summary: "Get repository statistics",
         description:
-          "Returns repository metrics including commits, pull requests, issues, contributors, language distribution, GitHub stars, forks, open issues, and six weeks of commit activity.",
+              "Returns repository metrics including commits, pull requests, issues, contributors, language distribution, GitHub stars, forks, open issues, and two weeks of commit activity.",
         tags: ["Repos"],
         security: [
           {
