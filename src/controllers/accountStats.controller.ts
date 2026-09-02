@@ -5,8 +5,9 @@ import { RepoStatsCache } from "../models/RepoStatsCache.js";
 import { GitHubService, RepoLite, RepoStats } from "../services/github.js";
 import { AuthRequest } from "../middleware/auth.js";
 
-const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
-const REPO_STATS_TTL_MS = 15 * 60 * 1000; // 15 minutes per-repo
+const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
+const REPO_STATS_TTL_MS = 60 * 60 * 1000; // 1 hour per-repo
+const MAX_AGGREGATED_REPOS = 30; // cap GitHub calls per account refresh
 
 interface AccountStats {
   commits: number;
@@ -106,7 +107,7 @@ const computeAndCache = async (
 ): Promise<IAccountStatsCache | null> => {
   let repos: RepoLite[];
   try {
-    repos = await service.paginateAllRepos();
+    repos = await service.paginateAllRepos(MAX_AGGREGATED_REPOS);
   } catch (err: unknown) {
     const status = (err as { status?: number }).status;
     const isRateLimit = status === 403 || status === 429;

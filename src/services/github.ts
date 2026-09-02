@@ -132,7 +132,7 @@ export class GitHubService {
     return result.repos;
   }
 
-  async paginateAllRepos(): Promise<RepoLite[]> {
+  async paginateAllRepos(max = 100): Promise<RepoLite[]> {
     const all: RepoLite[] = [];
     let page = 1;
     // eslint-disable-next-line no-constant-condition
@@ -144,10 +144,10 @@ export class GitHubService {
         affiliation: "owner,collaborator,organization_member",
       });
       all.push(...data.map((r) => this.mapRepo(r)));
-      if (data.length < 100) break;
+      if (data.length < 100 || all.length >= max) break;
       page += 1;
     }
-    return all;
+    return all.slice(0, max);
   }
 
   async getRepoLite(owner: string, repo: string): Promise<RepoLite> {
