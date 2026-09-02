@@ -1,10 +1,12 @@
 import { Response } from "express";
 import { User } from "../models/User.js";
 import { AccountStatsCache, IAccountStatsCache, CachedRepo } from "../models/AccountStatsCache.js";
+import { RepoStatsCache } from "../models/RepoStatsCache.js";
 import { GitHubService, RepoLite, RepoStats } from "../services/github.js";
 import { AuthRequest } from "../middleware/auth.js";
 
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
+const REPO_STATS_TTL_MS = 15 * 60 * 1000; // 15 minutes per-repo
 
 interface AccountStats {
   commits: number;
@@ -170,10 +172,26 @@ const computeAndCache = async (
       const repoIndex = index;
       index += 1;
       const repo = repos[repoIndex];
+      const fullName = repo.full_name;
       try {
-        perRepoStats[repoIndex] = await service.getRepoStats(
-          repo.owner,
-          repo.name
+        const cached = await RepoStatsCache.findOne({
+          userId,
+          repoFullName: fullName,
+        });
+        if (
+          cached &&
+          Date.now() - new Date(cached.updatedAt).getTime() < REPO_STATS_TTL_MS
+        ) {
+          perRepoStats[repoIndex] = { ...cached.repoStats } as RepoStats;
+          continue;
+        }
+
+        const fetched = await service.getRepoStats(repo.owner, repo.name);
+        perRepoStats[repoIndex] = fetched;
+        await RepoStatsCache.findOneAndUpdate(
+          { userId, repoFullName: fullName },
+          { $set: { repoStats: fetched } },
+          { new: true, upsert: true }
         );
       } catch (err) {
         console.error(
