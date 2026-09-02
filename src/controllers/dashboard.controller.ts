@@ -2,6 +2,7 @@ import { Response } from "express";
 import { User } from "../models/User.js";
 import { Analysis } from "../models/Analysis.js";
 import { getGitHubService } from "../utils/helpers.js";
+import { respondToGitHubError } from "../utils/githubErrors.js";
 import { AuthRequest } from "../middleware/auth.js";
 import { RepoLite, RepoStats } from "../services/github.js";
 
@@ -77,6 +78,7 @@ export const getDashboard = async (req: AuthRequest, res: Response): Promise<voi
     res.json(response);
   } catch (err: unknown) {
     console.error(err);
+    if (respondToGitHubError(res, err)) return;
     const status = (err as { status?: number }).status ?? 500;
     res.status(status).json({ error: "Failed to load dashboard" });
   }

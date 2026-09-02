@@ -1,5 +1,6 @@
 import { Response } from "express";
 import { getGitHubService } from "../utils/helpers.js";
+import { respondToGitHubError } from "../utils/githubErrors.js";
 import { AuthRequest } from "../middleware/auth.js";
 
 export const listRepos = async (req: AuthRequest, res: Response): Promise<void> => {
@@ -18,6 +19,7 @@ export const listRepos = async (req: AuthRequest, res: Response): Promise<void> 
     res.json(result);
   } catch (err) {
     console.error(err);
+    if (respondToGitHubError(res, err)) return;
     res.status(500).json({ error: "Failed to fetch repositories" });
   }
 };
@@ -31,6 +33,7 @@ export const getRepoDetails = async (req: AuthRequest, res: Response): Promise<v
     res.json(details);
   } catch (err: unknown) {
     console.error(err);
+    if (respondToGitHubError(res, err)) return;
     const status = (err as { status?: number }).status ?? 500;
     res.status(status).json({ error: "Failed to fetch repository" });
   }
@@ -45,6 +48,7 @@ export const getRepoStats = async (req: AuthRequest, res: Response): Promise<voi
     res.json({ stats });
   } catch (err: unknown) {
     console.error(err);
+    if (respondToGitHubError(res, err)) return;
     const status = (err as { status?: number }).status ?? 500;
     res.status(status).json({ error: "Failed to fetch repository stats" });
   }

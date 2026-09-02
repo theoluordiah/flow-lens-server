@@ -3,6 +3,7 @@ import { User } from "../models/User.js";
 import { AccountStatsCache, IAccountStatsCache, CachedRepo } from "../models/AccountStatsCache.js";
 import { RepoStatsCache } from "../models/RepoStatsCache.js";
 import { GitHubService, RepoLite, RepoStats } from "../services/github.js";
+import { respondToGitHubError } from "../utils/githubErrors.js";
 import { AuthRequest } from "../middleware/auth.js";
 
 const CACHE_TTL_MS = 60 * 60 * 1000; // 1 hour
@@ -110,6 +111,12 @@ const computeAndCache = async (
     repos = await service.paginateAllRepos(MAX_AGGREGATED_REPOS);
   } catch (err: unknown) {
     const status = (err as { status?: number }).status;
+    const msg = String((err as { message?: string })?.message || "").toLowerCase();
+    const isUnauthorized = status === 401 || msg.includes("bad credentials");
+    if (isUnauthorized) {
+      // Rethrow so the caller can surface 401 to the client.
+      throw err;
+    }
     const isRateLimit = status === 403 || status === 429;
     if (isRateLimit) {
       // Fall back to whatever we have cached, even if stale.
@@ -291,6 +298,7 @@ export const getAccountStats = async (
     });
   } catch (err) {
     console.error("[AccountStats] Server error:", err);
+    if (respondToGitHubError(res, err)) return;
     res.status(500).json({ error: "Failed to load account stats" });
   }
 };

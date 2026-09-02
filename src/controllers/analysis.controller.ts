@@ -1,6 +1,7 @@
 import { Response } from "express";
 import { Analysis } from "../models/Analysis.js";
 import { getGitHubService } from "../utils/helpers.js";
+import { respondToGitHubError } from "../utils/githubErrors.js";
 import {
   buildAnalysisPrompt,
   parseReport,
@@ -48,6 +49,7 @@ export const getCachedAnalysis = async (
     });
   } catch (err) {
     console.error(err);
+    if (respondToGitHubError(res, err)) return;
     res.status(500).json({ error: "Failed to fetch analysis" });
   }
 };
@@ -98,6 +100,7 @@ export const generateAnalysis = async (
     res.json({ report: analysis.report, repoStats: analysis.repoStats, cached: false });
   } catch (err) {
     console.error(`[Analysis] Error generating analysis:`, err);
+    if (respondToGitHubError(res, err)) return;
     res.status(500).json({ error: "Failed to generate analysis" });
   }
 };

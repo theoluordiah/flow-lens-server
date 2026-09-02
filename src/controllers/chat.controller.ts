@@ -2,6 +2,7 @@ import { Response } from "express";
 import { User } from "../models/User.js";
 import { Analysis } from "../models/Analysis.js";
 import { GitHubService } from "../services/github.js";
+import { respondToGitHubError } from "../utils/githubErrors.js";
 import {
   buildChatPrompt,
   buildAccountContext,
@@ -65,6 +66,7 @@ export const askFlowLens = async (req: AuthRequest, res: Response): Promise<void
     res.json({ answer });
   } catch (err) {
     console.error(err);
+    if (respondToGitHubError(res, err)) return;
     res.status(500).json({ error: "Failed to get answer" });
   }
 };
