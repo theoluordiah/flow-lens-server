@@ -43,6 +43,10 @@ export const swaggerDocument = {
       name: "Chat",
       description: "Ask FlowLens questions about development activity",
     },
+    {
+      name: "Card",
+      description: "Public, opt-in shareable score cards",
+    },
   ],
 
   components: {
@@ -76,6 +80,14 @@ export const swaggerDocument = {
           type: "string",
         },
         example: "flowlens",
+      },
+
+      ToneParam: {
+        name: "tone",
+        in: "query",
+        required: false,
+        description: "Narrative style. Scores are identical across tones; only the text changes.",
+        schema: { type: "string", enum: ["mentor", "roast", "hype"], default: "mentor" },
       },
     },
 
@@ -288,6 +300,8 @@ export const swaggerDocument = {
 
       DeveloperScores: {
         type: "object",
+        description:
+          "Computed deterministically from GitHub stats (not by the LLM), so re-running an analysis on the same data yields the same scores.",
         required: ["consistency", "codeQuality", "collaboration", "projectActivity", "overall"],
         properties: {
           consistency: {
@@ -333,6 +347,22 @@ export const swaggerDocument = {
         properties: {
           scores: {
             $ref: "#/components/schemas/DeveloperScores",
+          },
+
+          breakdown: {
+            type: "object",
+            description: "Human-readable explanation of how each score was computed from the raw stats.",
+            additionalProperties: { type: "string" },
+            example: {
+              consistency: "Commits in 2 of the last 2 weeks (9 → 11 per week).",
+              collaboration: "1 contributor, 0 recent PRs, 1 recent issue.",
+            },
+          },
+
+          headline: {
+            type: "string",
+            description: "One-line verdict used on the shareable card.",
+            example: "Two steady weeks of commits — now let someone else review them.",
           },
 
           strengths: {
@@ -887,6 +917,10 @@ export const swaggerDocument = {
           {
             $ref: "#/components/parameters/RepoParam",
           },
+
+          {
+            $ref: "#/components/parameters/ToneParam",
+          },
         ],
 
         responses: {
@@ -942,7 +976,7 @@ export const swaggerDocument = {
       post: {
         summary: "Generate AI developer report",
         description:
-          "Fetches repository statistics, sends structured developer data to the configured AI model, validates the response, and stores the generated report in MongoDB.",
+          "Fetches repository statistics, computes the scores deterministically, asks the AI model to write the narrative (strengths, improvements, summary) in the requested tone, and stores the report. Returns the cached report unless refresh=true. If the AI provider fails, a template narrative is used so the request still succeeds.",
         tags: ["Analysis"],
         security: [
           {
@@ -957,6 +991,18 @@ export const swaggerDocument = {
 
           {
             $ref: "#/components/parameters/RepoParam",
+          },
+
+          {
+            $ref: "#/components/parameters/ToneParam",
+          },
+
+          {
+            name: "refresh",
+            in: "query",
+            required: false,
+            description: "Ignore the cached report and generate a new one.",
+            schema: { type: "boolean", default: false },
           },
         ],
 
@@ -1022,6 +1068,83 @@ export const swaggerDocument = {
       },
     },
 
+    "/api/analysis/{owner}/{repo}/share": {
+      post: {
+        summary: "Share an analysis publicly",
+        description:
+          "Opt-in: gives the latest analysis for this repo (and tone) an unguessable public slug. Returns the public card URLs.",
+        tags: ["Analysis", "Card"],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/OwnerParam" },
+          { $ref: "#/components/parameters/RepoParam" },
+          { $ref: "#/components/parameters/ToneParam" },
+        ],
+        responses: {
+          "200": {
+            description: "Share links",
+            content: {
+              "application/json": {
+                schema: {
+                  type: "object",
+                  properties: {
+                    slug: { type: "string", example: "q3Zk_P1x" },
+                    cardUrl: { type: "string", example: "https://flowlens.app/card/q3Zk_P1x" },
+                    apiUrl: { type: "string" },
+                    imageUrl: { type: "string", example: "https://api.flowlens.app/api/card/q3Zk_P1x/image.svg" },
+                  },
+                },
+              },
+            },
+          },
+          "404": {
+            description: "No analysis to share yet.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+        },
+      },
+      delete: {
+        summary: "Stop sharing",
+        description: "Removes the public slug from every analysis of this repo.",
+        tags: ["Analysis", "Card"],
+        security: [{ bearerAuth: [] }],
+        parameters: [
+          { $ref: "#/components/parameters/OwnerParam" },
+          { $ref: "#/components/parameters/RepoParam" },
+        ],
+        responses: { "200": { description: "Unshared" } },
+      },
+    },
+
+    "/api/card/{slug}": {
+      get: {
+        summary: "Get a public score card (JSON)",
+        tags: ["Card"],
+        parameters: [{ name: "slug", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": { description: "Card data for the shared analysis." },
+          "404": {
+            description: "Not found or no longer shared.",
+            content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } },
+          },
+        },
+      },
+    },
+
+    "/api/card/{slug}/image.svg": {
+      get: {
+        summary: "Get a public score card (SVG image)",
+        description:
+          "Embeddable image, e.g. in a GitHub README: ![FlowLens](https://<api>/api/card/<slug>/image.svg)",
+        tags: ["Card"],
+        parameters: [{ name: "slug", in: "path", required: true, schema: { type: "string" } }],
+        responses: {
+          "200": { description: "SVG card", content: { "image/svg+xml": {} } },
+          "404": { description: "Not found or no longer shared." },
+        },
+      },
+    },
+
     "/api/chat": {
       post: {
         summary: "Ask FlowLens a question",
@@ -1060,6 +1183,12 @@ export const swaggerDocument = {
                   repo: {
                     type: "string",
                     example: "flowlens",
+                  },
+
+                  tone: {
+                    type: "string",
+                    enum: ["mentor", "roast", "hype"],
+                    default: "mentor",
                   },
 
                   history: {

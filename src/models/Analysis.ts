@@ -3,6 +3,8 @@ import mongoose, { Schema, Document } from "mongoose";
 export interface IAnalysis extends Document {
   userId: mongoose.Types.ObjectId;
   repoFullName: string;
+  tone: "mentor" | "roast" | "hype";
+  shareSlug?: string;
   report: {
     scores: {
       consistency: number;
@@ -11,6 +13,8 @@ export interface IAnalysis extends Document {
       projectActivity: number;
       overall: number;
     };
+    breakdown?: Record<string, string>;
+    headline?: string;
     strengths: string[];
     improvements: string[];
     summary: string;
@@ -30,6 +34,9 @@ const AnalysisSchema = new Schema<IAnalysis>(
   {
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true },
     repoFullName: { type: String, required: true },
+    tone: { type: String, enum: ["mentor", "roast", "hype"], default: "mentor" },
+    // Set only when the user explicitly shares this analysis publicly.
+    shareSlug: { type: String, unique: true, sparse: true },
     report: {
       scores: {
         consistency: { type: Number, required: true },
@@ -38,6 +45,8 @@ const AnalysisSchema = new Schema<IAnalysis>(
         projectActivity: { type: Number, required: true },
         overall: { type: Number, required: true },
       },
+      breakdown: { type: Schema.Types.Mixed },
+      headline: { type: String },
       strengths: [String],
       improvements: [String],
       summary: { type: String, required: true },
@@ -54,6 +63,6 @@ const AnalysisSchema = new Schema<IAnalysis>(
   { timestamps: true }
 );
 
-AnalysisSchema.index({ userId: 1, repoFullName: 1 });
+AnalysisSchema.index({ userId: 1, repoFullName: 1, tone: 1 });
 
 export const Analysis = mongoose.model<IAnalysis>("Analysis", AnalysisSchema);

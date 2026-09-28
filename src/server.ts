@@ -12,8 +12,13 @@ import analysisRoutes from "./routes/analysis.js";
 import chatRoutes from "./routes/chat.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import accountStatsRoutes from "./routes/accountStats.js";
+import cardRoutes from "./routes/card.js";
 
 const app = express();
+
+// Render (and most PaaS) sit behind a proxy; without this every client shares one
+// rate-limit bucket and req.protocol reports http.
+app.set("trust proxy", 1);
 
 app.use(
   cors({
@@ -29,6 +34,7 @@ app.use((req, _res, next) => {
 });
 
 app.get("/", healthCheck);
+app.get("/health", healthCheck);
 
 app.use("/api-docs", swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
@@ -38,6 +44,7 @@ app.use("/api/analysis", apiLimiter, analysisRoutes);
 app.use("/api/chat", apiLimiter, chatRoutes);
 app.use("/api/dashboard", apiLimiter, dashboardRoutes);
 app.use("/api/account", apiLimiter, accountStatsRoutes);
+app.use("/api/card", apiLimiter, cardRoutes);
 
 app.use(
   (

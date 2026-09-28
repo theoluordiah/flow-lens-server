@@ -7,6 +7,7 @@ import {
   buildChatPrompt,
   buildAccountContext,
   DeveloperReport,
+  parseTone,
 } from "../services/analyzer.js";
 import { groqChat } from "../services/groq.js";
 import { AuthRequest } from "../middleware/auth.js";
@@ -17,11 +18,12 @@ interface ChatBody {
   repo?: string;
   history?: { role: "user" | "assistant"; content: string }[];
   context?: Record<string, unknown>;
+  tone?: string;
 }
 
 export const askFlowLens = async (req: AuthRequest, res: Response): Promise<void> => {
   try {
-    const { message, owner, repo, history, context } = req.body as ChatBody;
+    const { message, owner, repo, history, context, tone } = req.body as ChatBody;
     if (!message || typeof message !== "string") {
       res.status(400).json({ error: "message is required" });
       return;
@@ -59,7 +61,8 @@ export const askFlowLens = async (req: AuthRequest, res: Response): Promise<void
       resolvedRepo || "",
       report,
       history || [],
-      accountContext
+      accountContext,
+      parseTone(tone)
     );
 
     const answer = await groqChat(prompt, false);
