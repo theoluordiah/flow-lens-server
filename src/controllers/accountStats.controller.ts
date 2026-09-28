@@ -2,7 +2,7 @@ import { Response } from "express";
 import { User } from "../models/User.js";
 import { AccountStatsCache, IAccountStatsCache, CachedRepo } from "../models/AccountStatsCache.js";
 import { RepoStatsCache } from "../models/RepoStatsCache.js";
-import { GitHubService, RepoLite, RepoStats } from "../services/github.js";
+import { GitHubService, RepoLite, RepoStats, WINDOW_WEEKS } from "../services/github.js";
 import { respondToGitHubError } from "../utils/githubErrors.js";
 import { AuthRequest } from "../middleware/auth.js";
 
@@ -24,6 +24,10 @@ interface AccountStats {
   languageRepos: Record<string, number>;
   weeklyActivity: number[];
 }
+
+// Stats cached before the activity window changed have a different week count.
+const matchesWindow = (weekly?: number[]) =>
+  !weekly || weekly.length === 0 || weekly.length === WINDOW_WEEKS;
 
 const sumWeekly = (weeklyActivity: number[][], weekCount: number): number[] => {
   const totals = new Array<number>(weekCount).fill(0);
@@ -188,7 +192,8 @@ const computeAndCache = async (
         });
         if (
           cached &&
-          Date.now() - new Date(cached.updatedAt).getTime() < REPO_STATS_TTL_MS
+          Date.now() - new Date(cached.updatedAt).getTime() < REPO_STATS_TTL_MS &&
+          matchesWindow(cached.repoStats?.weeklyActivity)
         ) {
           perRepoStats[repoIndex] = { ...cached.repoStats } as RepoStats;
           continue;
@@ -259,7 +264,8 @@ export const getAccountStats = async (
     const cached = await AccountStatsCache.findOne({ userId });
     if (
       cached &&
-      Date.now() - new Date(cached.updatedAt).getTime() < CACHE_TTL_MS
+      Date.now() - new Date(cached.updatedAt).getTime() < CACHE_TTL_MS &&
+      matchesWindow(cached.stats?.weeklyActivity)
     ) {
       res.json({
         developer: user,

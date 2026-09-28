@@ -1,6 +1,10 @@
 import { Octokit } from "@octokit/rest";
 import { IUser } from "../models/User.js";
 
+/** Length of the activity window used for all repo stats and scoring. */
+export const WINDOW_WEEKS = 6;
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
+
 export interface RepoStats {
   commits: number;
   pullRequests: number;
@@ -187,7 +191,7 @@ export class GitHubService {
   }
 
   async getRepoStats(owner: string, repo: string): Promise<RepoStats> {
-    const twoWeeksAgo = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000);
+    const windowStart = new Date(Date.now() - WINDOW_WEEKS * WEEK_MS);
 
     const [repoRes, contributorsRes, languagesRes] = await Promise.all([
       this.octokit.repos.get({ owner, repo }),
@@ -195,21 +199,17 @@ export class GitHubService {
       this.octokit.repos.listLanguages({ owner, repo }).catch(() => ({ data: {} })),
     ]);
 
-    const [recentPRs, recentIssues, recentCommits] = await Promise.all([
+    const [recentPRs, recentIssues, { commits: recentCommits, weeklyActivity }] = await Promise.all([
       this.countRecentItems(
         (page) => this.octokit.pulls.list({ owner, repo, state: "all", sort: "created", direction: "desc", per_page: 100, page }).then((r) => r.data),
-        twoWeeksAgo
+        windowStart
       ).catch(() => 0),
       this.countRecentItems(
         (page) => this.octokit.issues.list({ owner, repo, state: "all", sort: "created", direction: "desc", per_page: 100, page }).then((r) => r.data),
-        twoWeeksAgo
+        windowStart
       ).catch(() => 0),
-      this.octokit.repos.listCommits({ owner, repo, per_page: 1, since: twoWeeksAgo.toISOString() })
-        .then((r) => this.parsePageCount(r.headers?.link))
-        .catch(() => 0),
+      this.getCommitActivity(owner, repo, windowStart),
     ]);
-
-    const weeklyActivity = await this.getWeeklyActivity(owner, repo);
 
     const totalBytes = Object.values(languagesRes.data ?? {}).reduce((a, b) => a + b, 0);
     const languagePercentages: Record<string, number> = {};
@@ -233,29 +233,68 @@ export class GitHubService {
     };
   }
 
-  private async getWeeklyActivity(owner: string, repo: string): Promise<number[]> {
-    const weeks: number[] = [];
-    const now = new Date();
-    for (let i = 1; i >= 0; i--) {
-      const since = new Date(now);
-      since.setDate(now.getDate() - (i + 1) * 7);
-      const until = new Date(now);
-      until.setDate(now.getDate() - i * 7);
+  /**
+   * Commit count and per-week buckets (oldest → newest) for the activity window.
+   * Small repos need a single request; busy repos fall back to one request per week.
+   */
+  private async getCommitActivity(
+    owner: string,
+    repo: string,
+    windowStart: Date
+  ): Promise<{ commits: number; weeklyActivity: number[] }> {
+    const empty = { commits: 0, weeklyActivity: new Array<number>(WINDOW_WEEKS).fill(0) };
+    try {
+      const { data } = await this.octokit.repos.listCommits({
+        owner,
+        repo,
+        since: windowStart.toISOString(),
+        per_page: 100,
+      });
 
-      try {
-        const { data } = await this.octokit.repos.listCommits({
-          owner,
-          repo,
-          since: since.toISOString(),
-          until: until.toISOString(),
-          per_page: 100,
-        });
-        weeks.push(Array.isArray(data) ? data.length : 0);
-      } catch {
-        weeks.push(0);
+      if (data.length < 100) {
+        const weeks = empty.weeklyActivity.slice();
+        const now = Date.now();
+        for (const c of data) {
+          const date = c.commit.author?.date ?? c.commit.committer?.date;
+          if (!date) continue;
+          const weeksAgo = Math.floor((now - new Date(date).getTime()) / WEEK_MS);
+          const idx = WINDOW_WEEKS - 1 - Math.min(Math.max(weeksAgo, 0), WINDOW_WEEKS - 1);
+          weeks[idx]++;
+        }
+        return { commits: data.length, weeklyActivity: weeks };
       }
+
+      const [commits, weeklyActivity] = await Promise.all([
+        this.octokit.repos
+          .listCommits({ owner, repo, per_page: 1, since: windowStart.toISOString() })
+          .then((r) => this.parsePageCount(r.headers?.link)),
+        this.getWeeklyActivity(owner, repo),
+      ]);
+      return { commits, weeklyActivity };
+    } catch {
+      return empty;
     }
-    return weeks;
+  }
+
+  private async getWeeklyActivity(owner: string, repo: string): Promise<number[]> {
+    const now = Date.now();
+    return Promise.all(
+      Array.from({ length: WINDOW_WEEKS }, async (_, idx) => {
+        const weeksAgo = WINDOW_WEEKS - 1 - idx;
+        try {
+          const { data } = await this.octokit.repos.listCommits({
+            owner,
+            repo,
+            since: new Date(now - (weeksAgo + 1) * WEEK_MS).toISOString(),
+            until: new Date(now - weeksAgo * WEEK_MS).toISOString(),
+            per_page: 100,
+          });
+          return Array.isArray(data) ? data.length : 0;
+        } catch {
+          return 0;
+        }
+      })
+    );
   }
 
   private parsePageCount(linkHeader?: string): number {

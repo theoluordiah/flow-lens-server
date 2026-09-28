@@ -272,7 +272,7 @@ export const swaggerDocument = {
           weeklyActivity: {
             type: "array",
             description:
-              "Commit activity for the last 2 weeks, ordered from oldest to newest.",
+              "Commit activity for the last 6 weeks, ordered from oldest to newest.",
             items: {
               type: "integer",
             },
@@ -354,7 +354,7 @@ export const swaggerDocument = {
             description: "Human-readable explanation of how each score was computed from the raw stats.",
             additionalProperties: { type: "string" },
             example: {
-              consistency: "Commits in 2 of the last 2 weeks (9 → 11 per week).",
+              consistency: "Commits in 5 of the last 6 weeks (4 → 0 → 6 → 9 → 11 → 7 per week).",
               collaboration: "1 contributor, 0 recent PRs, 1 recent issue.",
             },
           },
@@ -837,7 +837,7 @@ export const swaggerDocument = {
       get: {
         summary: "Get repository statistics",
         description:
-              "Returns repository metrics including commits, pull requests, issues, contributors, language distribution, GitHub stars, forks, open issues, and two weeks of commit activity.",
+              "Returns repository metrics including commits, pull requests, issues, contributors, language distribution, GitHub stars, forks, open issues, and six weeks of commit activity.",
         tags: ["Repos"],
         security: [
           {

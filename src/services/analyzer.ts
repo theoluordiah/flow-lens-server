@@ -1,4 +1,4 @@
-import { RepoStats } from "./github.js";
+import { RepoStats, WINDOW_WEEKS } from "./github.js";
 import { ScoreResult, ScoreKey } from "./scoring.js";
 
 export type ReportTone = "mentor" | "roast" | "hype";
@@ -120,7 +120,8 @@ Contributors: ${stats.contributors}
 Stars: ${stats.stars}
 Forks: ${stats.forks}
 Languages: ${langSummary || "Not detected"}
-Weekly commit activity (last 2 weeks, oldest to newest): [${stats.weeklyActivity.join(", ")}]`;
+Activity window: last ${WINDOW_WEEKS} weeks (commit, PR and issue counts cover this window)
+Weekly commit activity (oldest to newest): [${stats.weeklyActivity.join(", ")}]`;
 };
 
 

@@ -1,4 +1,4 @@
-import { RepoStats } from "./github.js";
+import { RepoStats, WINDOW_WEEKS } from "./github.js";
 
 export type ScoreKey = "consistency" | "codeQuality" | "collaboration" | "projectActivity";
 
@@ -31,23 +31,27 @@ const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 export const computeScores = (stats: RepoStats): ScoreResult => {
   const weeks = stats.weeklyActivity.length ? stats.weeklyActivity : [0];
   const activeWeeks = weeks.filter((w) => w > 0).length;
-  const maxWeek = Math.max(...weeks);
-  const minWeek = Math.min(...weeks);
   const totalWeekly = weeks.reduce((a, b) => a + b, 0);
+
+  // Evenness: 1 when every week has the same number of commits, falling toward 0
+  // as activity bunches into a few weeks (based on the coefficient of variation).
+  const mean = totalWeekly / weeks.length;
+  const stdDev = Math.sqrt(weeks.reduce((sum, w) => sum + (w - mean) ** 2, 0) / weeks.length);
+  const evenness = mean > 0 ? Math.max(0, 1 - stdDev / mean / 2) : 0;
 
   // Consistency: how many weeks had commits, and how evenly they were spread.
   const coverage = activeWeeks / weeks.length;
-  const evenness = maxWeek > 0 ? minWeek / maxWeek : 0;
   const consistency = clamp(coverage * 70 + evenness * 30);
 
+  // Targets below are what a healthy, active repo does over the WINDOW_WEEKS window.
   // Project activity: overall throughput, PRs and issues weigh more than a single commit.
   const throughput = stats.commits + stats.pullRequests * 3 + stats.issues * 2;
-  const projectActivity = clamp(logScale(throughput, 60) * 100);
+  const projectActivity = clamp(logScale(throughput, 150) * 100);
 
   // Collaboration: other people involved + PR-based workflow + issue tracking.
   const contributorScore = logScale(Math.max(0, stats.contributors - 1), 8);
-  const prScore = logScale(stats.pullRequests, 6);
-  const issueScore = logScale(stats.issues, 6);
+  const prScore = logScale(stats.pullRequests, 12);
+  const issueScore = logScale(stats.issues, 12);
   const collaboration = clamp(contributorScore * 45 + prScore * 40 + issueScore * 15);
 
   // Code quality (workflow proxy): changes go through PRs, commits are spread out
@@ -65,7 +69,7 @@ export const computeScores = (stats: RepoStats): ScoreResult => {
 
   const breakdown: Record<ScoreKey, string> = {
     consistency: `Commits in ${activeWeeks} of the last ${weeks.length} weeks (${weeks.join(" → ")} per week).`,
-    projectActivity: `${plural(stats.commits, "commit")}, ${plural(stats.pullRequests, "PR")} and ${plural(stats.issues, "issue")} in the last 2 weeks.`,
+    projectActivity: `${plural(stats.commits, "commit")}, ${plural(stats.pullRequests, "PR")} and ${plural(stats.issues, "issue")} in the last ${WINDOW_WEEKS} weeks.`,
     collaboration: `${plural(stats.contributors, "contributor")}, ${plural(stats.pullRequests, "recent PR")}, ${plural(stats.issues, "recent issue")}.`,
     codeQuality: `${stats.commits > 0 ? `${stats.pullRequests} PRs for ${stats.commits} commits` : "No recent commits"}; ${plural(stats.openIssues, "open issue")} in the backlog.`,
   };
