@@ -20,6 +20,10 @@ const app = express();
 // rate-limit bucket and req.protocol reports http.
 app.set("trust proxy", 1);
 
+// Shared cards are public and fetched from anywhere (PNG export, README embeds,
+// preview deployments), so they get open CORS. Mounted before the app-wide policy.
+app.use("/api/card", cors({ origin: "*" }), apiLimiter, cardRoutes);
+
 app.use(
   cors({
     origin: config.clientUrl,
@@ -44,7 +48,6 @@ app.use("/api/analysis", apiLimiter, analysisRoutes);
 app.use("/api/chat", apiLimiter, chatRoutes);
 app.use("/api/dashboard", apiLimiter, dashboardRoutes);
 app.use("/api/account", apiLimiter, accountStatsRoutes);
-app.use("/api/card", apiLimiter, cardRoutes);
 
 app.use(
   (

@@ -144,7 +144,9 @@ export const shareAnalysis = async (req: AuthRequest, res: Response): Promise<vo
       await analysis.save();
     }
 
-    const base = `${req.protocol}://${req.get("host")}`;
+    // Behind Render's proxy chain, trust the original scheme so links are https.
+    const proto = req.get("x-forwarded-proto")?.split(",")[0].trim() || req.protocol;
+    const base = `${proto}://${req.get("host")}`;
     res.json({
       slug: analysis.shareSlug,
       cardUrl: `${config.clientUrl}/card/${analysis.shareSlug}`,
