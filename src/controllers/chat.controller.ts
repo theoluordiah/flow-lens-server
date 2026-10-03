@@ -51,8 +51,9 @@ export const askFlowLens = async (req: AuthRequest, res: Response): Promise<void
       if (cached) report = cached.report;
     }
 
+    // With a repo selected, account-wide numbers only confuse the answer.
     const accountContext =
-      context && typeof context === "object" ? buildAccountContext(context) : null;
+      !stats && context && typeof context === "object" ? buildAccountContext(context) : null;
 
     const prompt = buildChatPrompt(
       message,
@@ -65,7 +66,7 @@ export const askFlowLens = async (req: AuthRequest, res: Response): Promise<void
       parseTone(tone)
     );
 
-    const answer = await groqChat(prompt, false);
+    const answer = await groqChat(prompt, false, parseTone(tone));
     res.json({ answer });
   } catch (err) {
     console.error(err);

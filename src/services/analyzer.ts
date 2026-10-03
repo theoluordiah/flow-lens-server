@@ -106,7 +106,9 @@ const TONE_INSTRUCTIONS: Record<ReportTone, string> = {
   mentor:
     "Tone: a supportive, direct senior engineering mentor.",
   roast:
-    "Tone: a good-natured comedy roast of this repository's GitHub stats, like a witty friend at a hackathon. Be funny and a little savage about the numbers and habits (commit patterns, lonely pull requests, issue backlog), never about the person's identity, intelligence or appearance. Every joke must reference a real number from the data. Improvements should still be genuinely useful, just delivered with humour.",
+    `Tone: a merciless comedy roast, the headline act at a celebrity roast where the developer is the guest of honour and the audience paid to watch them get destroyed. This overrides any instruction to be warm or supportive. Go hard. No softening, no reassurance, no "but seriously, you are doing great". Strengths are backhanded compliments that land as insults. Improvements are still real, specific advice, delivered as if it pains you to explain something this obvious.
+Every joke hits a real number from the data and makes it specific and vivid: the empty weeks, the commit count, the pull requests nobody reviewed because nobody else is there, the zero stars, the issue backlog, the language mix, the one burst week followed by silence. Compare their numbers to absurd things, imagine what their commit history says about their week, treat the repo like a crime scene or an abandoned shopping trolley. Short, punchy lines beat long setups.
+Target the work and the habits only. Never joke about race, ethnicity, gender, sexuality, religion, nationality, disability, body, family or mental health, no slurs, no threats, and no swearing, so the roast can be read out on stage and shared on LinkedIn.`,
   hype:
     "Tone: an excited sports commentator who is thrilled about this developer's stats. Use energy and playful exaggeration, but every claim must reference a real number from the data. Frame improvements as the next thing they can unlock.",
 };
@@ -186,6 +188,16 @@ Rules:
 - Improvements must be specific and actionable.`;
 };
 
+// Chat replies are read in a small panel, so each tone gets a hard length limit.
+const CHAT_REPLY: Record<ReportTone, string> = {
+  mentor:
+    "Reply like a mentor talking it through: one or two short paragraphs, under 120 words in total. Say what the numbers mean for them and finish with one concrete thing they can do this week.",
+  roast: `${TONE_INSTRUCTIONS.roast}
+Reply with a single roast of 3 to 5 short sentences, under 80 words in total. No paragraphs of advice and no step by step plan. If they asked what to do, the advice is folded into the punchline of the last sentence. Ignore the polite tone of any earlier replies in the conversation.`,
+  hype: `${TONE_INSTRUCTIONS.hype}
+Reply in 3 to 5 short, high energy sentences, under 90 words in total, and finish with the one thing they should do next.`,
+};
+
 export const buildChatPrompt = (
   question: string,
   stats: RepoStats | null,
@@ -228,8 +240,10 @@ Conversation so far:
 ${historyText || "(none)"}
 
 Developer asks: "${question}"
-Answer the way a mentor would in a conversation: usually two or three short paragraphs, less if the question is simple. Cite the developer's real repositories and stats above and say what the numbers mean for them. Ground every suggestion in the actual data provided; if a specific repo is asked about and it is in the list, reference it directly. When they ask what to work on or where they are weak, start from the measured next steps if they are listed, and only quote score changes that appear there. End with one concrete thing they can do this week.
-${tone === "mentor" ? "" : TONE_INSTRUCTIONS[tone]}`;
+
+${CHAT_REPLY[tone]}
+
+Facts: use only the numbers and repositories listed above${stats ? `, and talk only about ${owner}/${repo}` : ""}. You cannot see files, code, READMEs, tests or documentation, so never claim anything about them. When they ask what to work on or where they are weak, start from the measured next steps if they are listed, and only quote score changes that appear there.`;
 };
 
 export const buildAccountContext = (context: Record<string, unknown>): string => {

@@ -20,16 +20,17 @@ import { config } from "../config/keys.js";
 const generateNarrative = async (
   prompt: string,
   result: ScoreResult,
-  plan: GrowthPlan
+  plan: GrowthPlan,
+  tone: ReportTone
 ): Promise<ReportNarrative> => {
   try {
-    const narrative = parseNarrative(await groqChat(prompt, true));
+    const narrative = parseNarrative(await groqChat(prompt, true, tone));
     if (narrative) return narrative;
 
     const retryPrompt = `${prompt}
 
 Your previous response was not valid JSON with the exact required structure. Respond with ONLY valid JSON matching the exact shape described above (headline string, strengths and improvements as non-empty arrays of strings, and a summary string). No markdown, no commentary.`;
-    const retry = parseNarrative(await groqChat(retryPrompt, true));
+    const retry = parseNarrative(await groqChat(retryPrompt, true, tone));
     if (retry) return retry;
   } catch (err) {
     console.error("[Analysis] Groq failed, using fallback narrative:", err);
@@ -102,7 +103,8 @@ export const generateAnalysis = async (
     const narrative = await generateNarrative(
       buildAnalysisPrompt(stats, owner, repo, result, tone, growthPlan),
       result,
-      growthPlan
+      growthPlan,
+      tone
     );
     console.log(`[Analysis] Report generated.`);
 

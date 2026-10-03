@@ -16,6 +16,9 @@ export const humanize = (text: string): string =>
     .replace(/\s*—\s*/g, ", ")
     .replace(/(\d)\s*–\s*(\d)/g, "$1 to $2")
     .replace(/\s*–\s*/g, ", ")
+    // Non-breaking and other unicode hyphens to a plain hyphen
+    .replace(/­/g, "")
+    .replace(/[‐‑‒]/g, "-")
     // Curly quotes to straight
     .replace(/[“”„]/g, '"')
     .replace(/[‘’‚]/g, "'")
