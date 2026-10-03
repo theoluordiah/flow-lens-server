@@ -57,7 +57,33 @@ export interface ReposResult {
   };
 }
 
-const getOctokit = (accessToken: string) => new Octokit({ auth: accessToken });
+export interface ContributionDay {
+  date: string;
+  count: number;
+  /** 0–4, GitHub's own quartile bucket for the day. */
+  level: number;
+}
+
+export interface ContributionCalendar {
+  login: string;
+  from: string;
+  to: string;
+  totalContributions: number;
+  hasRestrictedContributions: boolean;
+  restrictedContributionsCount: number;
+  /** Sunday-first weeks, oldest first, exactly as GitHub returns them. */
+  weeks: ContributionDay[][];
+}
+
+const CONTRIBUTION_LEVELS: Record<string, number> = {
+  NONE: 0,
+  FIRST_QUARTILE: 1,
+  SECOND_QUARTILE: 2,
+  THIRD_QUARTILE: 3,
+  FOURTH_QUARTILE: 4,
+};
+
+const getOctokit =(accessToken: string) => new Octokit({ auth: accessToken });
 
 export class GitHubService {
   private octokit: Octokit;
@@ -176,6 +202,63 @@ export class GitHubService {
   async getFollowers(): Promise<number> {
     const { data } = await this.octokit.users.getAuthenticated();
     return data?.followers ?? 0;
+  }
+
+  /**
+   * The signed-in user's contribution calendar for the last year, as GitHub itself
+   * reports it. Counts come from the user's own token, so they may include private
+   * contributions the user can see; only daily totals are returned, never repo names.
+   */
+  async getContributionCalendar(): Promise<ContributionCalendar> {
+    const data = await this.octokit.graphql<{
+      viewer: {
+        login: string;
+        contributionsCollection: {
+          startedAt: string;
+          endedAt: string;
+          hasAnyRestrictedContributions: boolean;
+          restrictedContributionsCount: number;
+          contributionCalendar: {
+            totalContributions: number;
+            weeks: {
+              contributionDays: { date: string; contributionCount: number; contributionLevel: string }[];
+            }[];
+          };
+        };
+      };
+    }>(`
+      query {
+        viewer {
+          login
+          contributionsCollection {
+            startedAt
+            endedAt
+            hasAnyRestrictedContributions
+            restrictedContributionsCount
+            contributionCalendar {
+              totalContributions
+              weeks { contributionDays { date contributionCount contributionLevel } }
+            }
+          }
+        }
+      }
+    `);
+    const c = data.viewer.contributionsCollection;
+    return {
+      login: data.viewer.login,
+      from: c.startedAt,
+      to: c.endedAt,
+      totalContributions: c.contributionCalendar.totalContributions,
+      hasRestrictedContributions: c.hasAnyRestrictedContributions,
+      restrictedContributionsCount: c.restrictedContributionsCount,
+      weeks: c.contributionCalendar.weeks.map((w) =>
+        w.contributionDays.map((d) => ({
+          date: d.date,
+          count: d.contributionCount,
+          level: CONTRIBUTION_LEVELS[d.contributionLevel] ?? 0,
+        }))
+      ),
+    };
   }
 
   async getRepoDetails(owner: string, repo: string) {
