@@ -102,7 +102,7 @@ export const fallbackNarrative = (result: ScoreResult, plan?: GrowthPlan): Repor
   };
 };
 
-const TONE_INSTRUCTIONS: Record<ReportTone, string> = {
+export const TONE_INSTRUCTIONS: Record<ReportTone, string> = {
   mentor:
     "Tone: a supportive, direct senior engineering mentor.",
   roast:
@@ -206,7 +206,8 @@ export const buildChatPrompt = (
   report: DeveloperReport | null,
   history: { role: "user" | "assistant"; content: string }[],
   accountContext?: string | null,
-  tone: ReportTone = "mentor"
+  tone: ReportTone = "mentor",
+  codeContext?: string | null
 ): string => {
   const reportText = report
     ? `Existing analysis:
@@ -236,6 +237,8 @@ ${accountContext || ""}
 
 ${reportText}
 
+${codeContext || ""}
+
 Conversation so far:
 ${historyText || "(none)"}
 
@@ -243,7 +246,7 @@ Developer asks: "${question}"
 
 ${CHAT_REPLY[tone]}
 
-Facts: use only the numbers and repositories listed above${stats ? `, and talk only about ${owner}/${repo}` : ""}. You cannot see files, code, READMEs, tests or documentation, so never claim anything about them. When they ask what to work on or where they are weak, start from the measured next steps if they are listed, and only quote score changes that appear there.`;
+Facts: use only the numbers and repositories listed above${stats ? `, and talk only about ${owner}/${repo}` : ""}. Only say something about the files, code, README or tests if it appears in the repository contents or code review above; never guess about code you were not shown. When they ask what to work on or where they are weak, start from the measured next steps if they are listed, and only quote score changes that appear there.`;
 };
 
 export const buildAccountContext = (context: Record<string, unknown>): string => {

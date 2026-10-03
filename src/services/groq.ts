@@ -2,7 +2,9 @@ import Groq from "groq-sdk";
 import { config } from "../config/keys.js";
 import { humanize } from "../utils/humanize.js";
 
-const groq = new Groq({ apiKey: config.groqApiKey });
+// One quick retry, then fail over to the other model: each Groq model has its own
+// per-minute token allowance, so switching is faster than waiting out the limit.
+const groq = new Groq({ apiKey: config.groqApiKey, maxRetries: 1 });
 
 type Tone = "mentor" | "roast" | "hype";
 
@@ -29,11 +31,49 @@ const PERSONA: Record<Tone, string> = {
 // Jokes need more variety than advice does.
 const TEMPERATURE: Record<Tone, number> = { mentor: 0.5, roast: 0.9, hype: 0.8 };
 
-export const groqChat = async (prompt: string, json: boolean, tone: Tone = "mentor"): Promise<string> => {
+export const DEFAULT_MODEL = "openai/gpt-oss-20b";
+const LARGE_MODEL = "openai/gpt-oss-120b";
+
+/** True when Groq refused the request because the shared per-minute allowance is used up. */
+export const isRateLimited = (err: unknown): boolean => (err as { status?: number })?.status === 429;
+
+export interface GroqOptions {
+  maxTokens?: number;
+  model?: string;
+  /** Overrides the tone's temperature, e.g. to keep a code review accurate in roast mode. */
+  temperature?: number;
+  /** Try the other model if this one is rate limited. Defaults to true. */
+  fallback?: boolean;
+}
+
+export const groqChat = async (
+  prompt: string,
+  json: boolean,
+  tone: Tone = "mentor",
+  { maxTokens = 2000, model = DEFAULT_MODEL, temperature, fallback = true }: GroqOptions = {}
+): Promise<string> => {
+  try {
+    return await complete(prompt, json, tone, maxTokens, model, temperature);
+  } catch (err) {
+    if (!fallback || !isRateLimited(err)) throw err;
+    const other = model === DEFAULT_MODEL ? LARGE_MODEL : DEFAULT_MODEL;
+    console.warn(`[Groq] ${model} is rate limited, trying ${other}.`);
+    return complete(prompt, json, tone, maxTokens, other, temperature);
+  }
+};
+
+const complete = async (
+  prompt: string,
+  json: boolean,
+  tone: Tone,
+  maxTokens: number,
+  model: string,
+  temperature: number | undefined
+): Promise<string> => {
   const response = await groq.chat.completions.create({
-    model: "openai/gpt-oss-20b",
-    temperature: TEMPERATURE[tone],
-    max_tokens: 2000,
+    model,
+    temperature: temperature ?? TEMPERATURE[tone],
+    max_tokens: maxTokens,
     messages: [
       {
         role: "system",

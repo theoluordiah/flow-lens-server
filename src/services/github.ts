@@ -17,6 +17,20 @@ export interface RepoStats {
   openIssues: number;
 }
 
+export interface RepoFile {
+  path: string;
+  sha: string;
+  size: number;
+}
+
+export interface RepoTree {
+  /** Commit the tree was read at; empty for a repository with no commits. */
+  sha: string;
+  branch: string;
+  files: RepoFile[];
+  truncated: boolean;
+}
+
 export interface RepoLite {
   id: string;
   full_name: string;
@@ -167,6 +181,32 @@ export class GitHubService {
   async getRepoDetails(owner: string, repo: string) {
     const { data } = await this.octokit.repos.get({ owner, repo });
     return this.mapRepo(data);
+  }
+
+  /** Every file on the default branch, pinned to the commit it was read at. */
+  async getRepoTree(owner: string, repo: string): Promise<RepoTree> {
+    const { data: r } = await this.octokit.repos.get({ owner, repo });
+    const branch = r.default_branch;
+    let sha: string;
+    try {
+      const { data: b } = await this.octokit.repos.getBranch({ owner, repo, branch });
+      sha = b.commit.sha;
+    } catch (err) {
+      // Empty repositories have no branch to read.
+      const status = (err as { status?: number })?.status;
+      if (status === 404 || status === 409) return { sha: "", branch, files: [], truncated: false };
+      throw err;
+    }
+    const { data: tree } = await this.octokit.git.getTree({ owner, repo, tree_sha: sha, recursive: "true" });
+    const files = tree.tree
+      .filter((t) => t.type === "blob" && t.path && t.sha)
+      .map((t) => ({ path: t.path!, sha: t.sha!, size: t.size ?? 0 }));
+    return { sha, branch, files, truncated: tree.truncated };
+  }
+
+  async getFileText(owner: string, repo: string, fileSha: string): Promise<string> {
+    const { data } = await this.octokit.git.getBlob({ owner, repo, file_sha: fileSha });
+    return Buffer.from(data.content, data.encoding === "base64" ? "base64" : "utf8").toString("utf8");
   }
 
   private async countRecentItems(

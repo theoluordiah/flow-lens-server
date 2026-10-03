@@ -13,6 +13,7 @@ import chatRoutes from "./routes/chat.js";
 import dashboardRoutes from "./routes/dashboard.js";
 import accountStatsRoutes from "./routes/accountStats.js";
 import cardRoutes from "./routes/card.js";
+import reviewRoutes from "./routes/review.js";
 
 const app = express();
 
@@ -46,6 +47,7 @@ app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/repos", apiLimiter, repoRoutes);
 app.use("/api/analysis", apiLimiter, analysisRoutes);
 app.use("/api/chat", apiLimiter, chatRoutes);
+app.use("/api/review", apiLimiter, reviewRoutes);
 app.use("/api/dashboard", apiLimiter, dashboardRoutes);
 app.use("/api/account", apiLimiter, accountStatsRoutes);
 
