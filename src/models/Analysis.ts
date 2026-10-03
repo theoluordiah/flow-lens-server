@@ -1,4 +1,5 @@
 import mongoose, { Schema, Document } from "mongoose";
+import type { GrowthPlan } from "../services/scoring.js";
 
 export interface IAnalysis extends Document {
   userId: mongoose.Types.ObjectId;
@@ -18,6 +19,8 @@ export interface IAnalysis extends Document {
     strengths: string[];
     improvements: string[];
     summary: string;
+    focus?: string;
+    growthPlan?: GrowthPlan;
   };
   repoStats: {
     commits: number;
@@ -50,6 +53,8 @@ const AnalysisSchema = new Schema<IAnalysis>(
       strengths: [String],
       improvements: [String],
       summary: { type: String, required: true },
+      focus: { type: String },
+      growthPlan: { type: Schema.Types.Mixed },
     },
     repoStats: {
       commits: { type: Number, required: true },

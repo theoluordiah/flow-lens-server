@@ -12,14 +12,15 @@ import {
   ReportTone,
   DeveloperReport,
 } from "../services/analyzer.js";
-import { computeScores, ScoreResult } from "../services/scoring.js";
+import { computeScores, buildGrowthPlan, GrowthPlan, ScoreResult } from "../services/scoring.js";
 import { groqChat } from "../services/groq.js";
 import { AuthRequest } from "../middleware/auth.js";
 import { config } from "../config/keys.js";
 
 const generateNarrative = async (
   prompt: string,
-  result: ScoreResult
+  result: ScoreResult,
+  plan: GrowthPlan
 ): Promise<ReportNarrative> => {
   try {
     const narrative = parseNarrative(await groqChat(prompt, true));
@@ -34,7 +35,7 @@ Your previous response was not valid JSON with the exact required structure. Res
     console.error("[Analysis] Groq failed, using fallback narrative:", err);
   }
   // Never fail an analysis because of the LLM — scores are already computed.
-  return fallbackNarrative(result);
+  return fallbackNarrative(result, plan);
 };
 
 // Analyses created before `tone` existed have no tone field; treat them as mentor.
@@ -96,10 +97,12 @@ export const generateAnalysis = async (
     console.log(`[Analysis] Fetching stats for ${repoFullName}...`);
     const stats = await service.getRepoStats(owner, repo);
     const result = computeScores(stats);
+    const growthPlan = buildGrowthPlan(stats);
     console.log(`[Analysis] Scores computed (overall ${result.scores.overall}). Calling Groq (${tone})...`);
     const narrative = await generateNarrative(
-      buildAnalysisPrompt(stats, owner, repo, result, tone),
-      result
+      buildAnalysisPrompt(stats, owner, repo, result, tone, growthPlan),
+      result,
+      growthPlan
     );
     console.log(`[Analysis] Report generated.`);
 
@@ -107,6 +110,7 @@ export const generateAnalysis = async (
       scores: result.scores,
       breakdown: result.breakdown,
       ...narrative,
+      growthPlan,
     };
 
     const analysis = await Analysis.create({

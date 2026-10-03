@@ -76,3 +76,137 @@ export const computeScores = (stats: RepoStats): ScoreResult => {
 
   return { scores: { ...scores, overall }, breakdown };
 };
+
+export const SCORE_LABELS: Record<ScoreKey, string> = {
+  consistency: "Consistency",
+  codeQuality: "Code quality",
+  collaboration: "Collaboration",
+  projectActivity: "Project activity",
+};
+
+export interface GrowthStep {
+  id: string;
+  /** The score this step moves the most. */
+  area: ScoreKey;
+  action: string;
+  detail: string;
+  overallFrom: number;
+  overallTo: number;
+  changes: { key: ScoreKey; from: number; to: number }[];
+}
+
+export interface GrowthPlan {
+  weakest: { key: ScoreKey; score: number };
+  steps: GrowthStep[];
+  /** Overall score if every step is done in the same window. */
+  combinedOverall: number;
+}
+
+type Candidate = {
+  id: string;
+  action: string;
+  detail: string;
+  apply: (s: RepoStats) => RepoStats;
+};
+
+const candidates = (stats: RepoStats): Candidate[] => {
+  const weeks = stats.weeklyActivity.length ? stats.weeklyActivity : [];
+  const activeWeeks = weeks.filter((w) => w > 0);
+  const emptyWeeks = weeks.length - activeWeeks.length;
+  const weeklyTotal = weeks.reduce((a, b) => a + b, 0);
+  const list: Candidate[] = [];
+
+  if (emptyWeeks > 0 && weeks.length) {
+    // Same amount of work, spread evenly. Only adds commits when there are fewer than one per week.
+    const total = Math.max(weeklyTotal, weeks.length);
+    const perWeek = Math.floor(total / weeks.length);
+    const spread = weeks.map((_, i) => perWeek + (i < total % weeks.length ? 1 : 0));
+    list.push({
+      id: "steady-weeks",
+      action: `Commit in every week, not just ${activeWeeks.length} of ${weeks.length}`,
+      detail:
+        weeklyTotal >= weeks.length
+          ? `You made ${plural(weeklyTotal, "commit")} but they landed in only ${plural(activeWeeks.length, "week")}. Spreading the same amount of work across every week, about ${plural(perWeek, "commit")} a week, needs no extra effort, just smaller pieces more often.`
+          : `You had ${plural(emptyWeeks, "week")} with no commits at all. One small commit in each of those weeks keeps the project visibly alive.`,
+      apply: (s) => ({
+        ...s,
+        commits: s.commits + (total - weeklyTotal),
+        weeklyActivity: spread,
+      }),
+    });
+  }
+
+  list.push({
+    id: "pull-requests",
+    action: "Ship your next 4 changes through pull requests",
+    detail:
+      stats.pullRequests === 0
+        ? "You pushed straight to the main branch with no pull requests in this window. Opening a pull request for each change, even when you merge it yourself, gives every change a written description and a place for feedback."
+        : `You opened ${plural(stats.pullRequests, "pull request")} for ${plural(stats.commits, "commit")}. Putting four more changes through pull requests, even ones you merge yourself, gives each change a written description and a place for feedback.`,
+    apply: (s) => ({ ...s, pullRequests: s.pullRequests + 4 }),
+  });
+
+  list.push({
+    id: "issues",
+    action: "Write an issue before you start each piece of work",
+    detail: `You opened ${plural(stats.issues, "issue")} in this window. Writing four short issues for work you plan to do shows what you are working on and why, and gives other people a way in.`,
+    apply: (s) => ({ ...s, issues: s.issues + 4 }),
+  });
+
+  list.push({
+    id: "reviewer",
+    action: "Bring one more person into the project",
+    detail:
+      stats.contributors <= 1
+        ? "Right now you are the only contributor. Asking one friend or colleague to review a pull request or fix a small issue is the single biggest change to how collaborative the project looks."
+        : `You have ${plural(stats.contributors, "contributor")}. Inviting one more person to review or pick up a small issue widens the project beyond its current group.`,
+    apply: (s) => ({ ...s, contributors: s.contributors + 1 }),
+  });
+
+  if (stats.openIssues > 5) {
+    list.push({
+      id: "backlog",
+      action: `Bring your open issues down from ${stats.openIssues} to 5`,
+      detail: `There are ${plural(stats.openIssues, "open issue")}. Closing the ones that are done or out of date, and labelling the rest, makes it clear which problems are real.`,
+      apply: (s) => ({ ...s, openIssues: 5 }),
+    });
+  }
+
+  return list;
+};
+
+const KEYS = Object.keys(WEIGHTS) as ScoreKey[];
+
+/**
+ * Tries each concrete action against the real scoring formula and keeps the ones
+ * that move the overall score the most. Nothing here is guessed by the LLM.
+ */
+export const buildGrowthPlan = (stats: RepoStats, maxSteps = 3): GrowthPlan => {
+  const base = computeScores(stats).scores;
+  const weakestKey = KEYS.reduce((a, b) => (base[b] < base[a] ? b : a));
+
+  const ranked = candidates(stats)
+    .map((c) => {
+      const next = computeScores(c.apply(stats)).scores;
+      const changes = KEYS.filter((k) => next[k] !== base[k]).map((k) => ({
+        key: k,
+        from: base[k],
+        to: next[k],
+      }));
+      const area = changes.length
+        ? changes.reduce((a, b) => (b.to - b.from > a.to - a.from ? b : a)).key
+        : weakestKey;
+      return { candidate: c, step: { id: c.id, area, action: c.action, detail: c.detail, overallFrom: base.overall, overallTo: next.overall, changes } };
+    })
+    .filter(({ step }) => step.overallTo > step.overallFrom)
+    .sort((a, b) => b.step.overallTo - a.step.overallTo);
+
+  const chosen = ranked.slice(0, maxSteps);
+  const combined = chosen.reduce((s, { candidate }) => candidate.apply(s), stats);
+
+  return {
+    weakest: { key: weakestKey, score: base[weakestKey] },
+    steps: chosen.map(({ step }) => step),
+    combinedOverall: chosen.length ? computeScores(combined).scores.overall : base.overall,
+  };
+};
