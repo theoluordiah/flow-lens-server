@@ -47,6 +47,10 @@ export const swaggerDocument = {
       name: "Card",
       description: "Public, opt-in shareable score cards",
     },
+    {
+      name: "Profile",
+      description: "Profile Builder: saved profile configuration and GitHub contribution calendar",
+    },
   ],
 
   components: {
@@ -479,6 +483,55 @@ export const swaggerDocument = {
   },
 
   paths: {
+    "/api/profile": {
+      get: {
+        summary: "Get the saved Profile Builder configuration",
+        tags: ["Profile"],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": { description: "Saved profile, or { profile: null } when none is saved." },
+          "401": { description: "Unauthorized." },
+        },
+      },
+      put: {
+        summary: "Save (create or replace) the Profile Builder configuration",
+        description:
+          "Text fields are length-limited, links must be http(s) or mailto URLs. Only generated ASCII text is stored for portraits; photos are never uploaded.",
+        tags: ["Profile"],
+        security: [{ bearerAuth: [] }],
+        requestBody: {
+          required: true,
+          content: { "application/json": { schema: { type: "object", properties: { profile: { type: "object" } } } } },
+        },
+        responses: {
+          "200": { description: "Saved profile." },
+          "400": { description: "Validation error.", content: { "application/json": { schema: { $ref: "#/components/schemas/Error" } } } },
+          "401": { description: "Unauthorized." },
+        },
+      },
+      delete: {
+        summary: "Delete the saved Profile Builder configuration",
+        tags: ["Profile"],
+        security: [{ bearerAuth: [] }],
+        responses: { "204": { description: "Deleted." }, "401": { description: "Unauthorized." } },
+      },
+    },
+
+    "/api/profile/contributions": {
+      get: {
+        summary: "Get the signed-in user's GitHub contribution calendar (last year)",
+        description:
+          "Real data from GitHub's GraphQL contributionCalendar, cached per user for 15 minutes. Returns daily totals only.",
+        tags: ["Profile"],
+        security: [{ bearerAuth: [] }],
+        responses: {
+          "200": { description: "Contribution calendar." },
+          "401": { description: "Unauthorized or GitHub token revoked." },
+          "429": { description: "GitHub rate limit reached." },
+          "502": { description: "GitHub did not return contribution data." },
+        },
+      },
+    },
     "/": {
       get: {
         summary: "Health check",
