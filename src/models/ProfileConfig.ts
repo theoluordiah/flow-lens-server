@@ -25,6 +25,7 @@ export interface ProfilePortrait {
   brightness: number;
   charset: PortraitCharset;
   invert: boolean;
+  enhance: boolean;
   fontSize: number;
   /** Generated ASCII text only. The source photo is processed in the browser and never stored. */
   ascii: string[];
@@ -50,6 +51,8 @@ export interface ProfileData {
   links: ProfileLink[];
   theme: ProfileTheme;
   animations: boolean;
+  terminalHeadings: boolean;
+  autoRefresh: boolean;
   sections: ProfileSections;
   portrait: ProfilePortrait;
   /** Hand-edited README; null means "use the generated one". */

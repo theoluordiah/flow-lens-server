@@ -150,6 +150,8 @@ export const validateProfile = (body: unknown): ValidationResult => {
         links: list(body.links, "Links", LIMITS.links, link),
         theme: theme as ProfileTheme,
         animations: bool(body.animations, true),
+        terminalHeadings: bool(body.terminalHeadings, true),
+        autoRefresh: bool(body.autoRefresh, true),
         sections: {
           card: bool(sections.card, true),
           contributions: bool(sections.contributions, true),
@@ -165,6 +167,7 @@ export const validateProfile = (body: unknown): ValidationResult => {
           brightness: num(portrait.brightness, "Portrait brightness", -1, 1, 0),
           charset: charset as PortraitCharset,
           invert: bool(portrait.invert, false),
+          enhance: bool(portrait.enhance, true),
           fontSize: num(portrait.fontSize, "Portrait size", 4, 14, 7),
           ascii,
         },
